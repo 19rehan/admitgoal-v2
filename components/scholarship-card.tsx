@@ -91,9 +91,12 @@ export function ScholarshipCard({
         >
           <Bookmark className="size-4" fill={isSaved ? "currentColor" : "none"} />
         </button>
-        <button className="flex-1 rounded-lg border border-white/15 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-white/5">
+        <a
+          href={`/scholarship/${s.id}`}
+          className="flex-1 rounded-lg border border-white/15 py-2.5 text-center text-sm font-semibold text-foreground transition-colors hover:bg-white/5"
+        >
           View Details
-        </button>
+        </a>
       </div>
     </article>
   )
