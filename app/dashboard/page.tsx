@@ -2,11 +2,11 @@
 
 import Link from "next/link"
 import { useState, useEffect } from "react"
-import { Bell, Bookmark, Send, Sparkles, Clock, ArrowRight, Edit3, Loader2 } from "lucide-react"
+import { Bookmark, Send, Sparkles, Clock, ArrowRight, Loader2, Target } from "lucide-react"
 import { DashboardShell } from "@/components/dashboard-shell"
 import { StatCard } from "@/components/stat-card"
-import { ReminderModal } from "@/components/reminder-modal"
 import { createClient } from "@supabase/supabase-js"
+import { rankScholarships } from "@/lib/match-score"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,6 +21,7 @@ export default function DashboardPage() {
   const [appCount, setAppCount] = useState(0)
   const [savedScholarships, setSavedScholarships] = useState<any[]>([])
   const [upcomingDeadlines, setUpcomingDeadlines] = useState<any[]>([])
+  const [topMatches, setTopMatches] = useState<any[]>([])
 
   useEffect(() => {
     const loadDashboard = async () => {
@@ -82,6 +83,19 @@ export default function DashboardPage() {
 
       setUpcomingDeadlines(deadlineData || [])
 
+      // AI MATCHING: Get top matched scholarships
+      if (profileData) {
+        const { data: allScholarships } = await supabase
+          .from("scholarship_details")
+          .select("id, title, university_name, country, degree_level, funding_type, eligible_countries, ielts_score, gpa_required, deadline")
+          .gte("deadline", new Date().toISOString().split("T")[0])
+
+        if (allScholarships && allScholarships.length > 0) {
+          const ranked = rankScholarships(profileData, allScholarships)
+          setTopMatches(ranked.slice(0, 6))
+        }
+      }
+
       setLoading(false)
     }
     loadDashboard()
@@ -109,12 +123,25 @@ export default function DashboardPage() {
 
   const getFlag = (country: string) => {
     const flags: Record<string, string> = {
-      "United Kingdom": "🇬🇧", "Germany": "🇩🇪", "Turkey": "🇹🇷", "China": "🇨🇳",
-      "USA": "🇺🇸", "Canada": "🇨🇦", "Australia": "🇦🇺", "Japan": "🇯🇵",
+      "United Kingdom": "🇬🇧", "UK": "🇬🇧", "Germany": "🇩🇪", "Turkey": "🇹🇷", "China": "🇨🇳",
+      "USA": "🇺🇸", "United States": "🇺🇸", "Canada": "🇨🇦", "Australia": "🇦🇺", "Japan": "🇯🇵",
       "South Korea": "🇰🇷", "France": "🇫🇷", "Netherlands": "🇳🇱", "Sweden": "🇸🇪",
       "Italy": "🇮🇹", "Spain": "🇪🇸", "Europe": "🇪🇺", "Malaysia": "🇲🇾",
+      "New Zealand": "🇳🇿", "Ireland": "🇮🇪", "Switzerland": "🇨🇭", "Denmark": "🇩🇰",
+      "Norway": "🇳🇴", "Finland": "🇫🇮",
     }
-    return flags[country] || "🌍"
+    if (!country) return "🌍"
+    for (const [key, flag] of Object.entries(flags)) {
+      if (country.toLowerCase().includes(key.toLowerCase())) return flag
+    }
+    return "🌍"
+  }
+
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return "oklch(0.7 0.16 155)" // green
+    if (score >= 60) return "oklch(0.78 0.15 75)" // gold
+    if (score >= 40) return "oklch(0.72 0.18 300)" // purple
+    return "oklch(0.6 0.1 285)" // muted
   }
 
   if (loading) {
@@ -157,7 +184,11 @@ export default function DashboardPage() {
             </span>
             <div>
               <p className="text-lg font-bold text-foreground">Your Profile: {getCompletion()}% Complete</p>
-              <p className="text-sm text-muted-foreground">Complete your profile to find better scholarship matches</p>
+              <p className="text-sm text-muted-foreground">
+                {getCompletion() < 100
+                  ? "Complete your profile to get better scholarship matches"
+                  : "Your profile is complete! Check your top matches below"}
+              </p>
               <div className="mt-3 h-2 w-full max-w-xs overflow-hidden rounded-full bg-white/10 sm:w-64">
                 <div className="h-full rounded-full bg-gradient-to-r from-brand to-brand-2 transition-all duration-500" style={{ width: `${getCompletion()}%` }} />
               </div>
@@ -167,10 +198,59 @@ export default function DashboardPage() {
             href="/profile/edit"
             className="shrink-0 rounded-xl bg-gradient-to-r from-brand to-brand-2 px-5 py-2.5 text-center text-sm font-semibold text-white shadow-[0_0_18px_rgba(139,92,246,0.45)] transition-transform hover:scale-[1.02]"
           >
-            Complete Profile
+            {getCompletion() < 100 ? "Complete Profile" : "Edit Profile"}
           </Link>
         </div>
       </div>
+
+      {/* TOP MATCHES — AI Scoring */}
+      {topMatches.length > 0 && (
+        <>
+          <SectionHeader title="🎯 Top Matches For You" href="/scholarships" />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {topMatches.map((s: any) => (
+              <div key={s.id} className="glass rounded-2xl p-4 transition-transform hover:scale-[1.01]" style={{ background: "rgba(26,26,46,0.55)" }}>
+                <div className="flex items-start justify-between">
+                  <span className="text-2xl">{getFlag(s.country)}</span>
+                  <div className="flex items-center gap-1.5 rounded-full px-2.5 py-1" style={{ background: `color-mix(in oklch, ${getScoreColor(s.matchScore)} 20%, transparent)` }}>
+                    <Target className="size-3.5" style={{ color: getScoreColor(s.matchScore) }} />
+                    <span className="text-xs font-bold" style={{ color: getScoreColor(s.matchScore) }}>{s.matchScore}%</span>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <p className="font-semibold text-foreground truncate">{s.title}</p>
+                  <p className="text-sm text-muted-foreground truncate">{s.university_name || "Multiple Universities"}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {s.degree_level && <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-muted-foreground">{s.degree_level}</span>}
+                    {s.funding_type && <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-muted-foreground">{s.funding_type}</span>}
+                  </div>
+                  {s.deadline && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Deadline: {s.deadline}
+                      {getDaysLeft(s.deadline) && ` · ${getDaysLeft(s.deadline)} days left`}
+                    </p>
+                  )}
+                </div>
+                <Link href={`/scholarship/${s.id}`} className="mt-3 block rounded-lg border border-white/15 py-2 text-center text-xs font-semibold text-foreground hover:bg-white/5 transition-colors">
+                  View Details
+                </Link>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* No profile warning */}
+      {!profile && (
+        <div className="mt-8 glass rounded-2xl p-8 text-center" style={{ background: "rgba(26,26,46,0.55)" }}>
+          <Target className="mx-auto size-10 text-[oklch(0.72_0.18_300)]" />
+          <p className="mt-3 text-lg font-semibold text-foreground">Create Your Profile to Get Matched</p>
+          <p className="mt-1 text-sm text-muted-foreground">We&apos;ll find scholarships that match your qualifications, country, and preferences</p>
+          <Link href="/profile/create" className="mt-4 inline-block rounded-xl bg-gradient-to-r from-brand to-brand-2 px-6 py-3 text-sm font-semibold text-white shadow-[0_0_18px_rgba(139,92,246,0.45)]">
+            Create Profile
+          </Link>
+        </div>
+      )}
 
       {/* Recently Saved */}
       <SectionHeader title="Recently Saved" href="/saved" />
@@ -184,8 +264,8 @@ export default function DashboardPage() {
                   <p className="font-semibold text-foreground truncate">{s.title}</p>
                   <p className="text-sm text-muted-foreground truncate">{s.university_name}</p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-muted-foreground">{s.degree_level}</span>
-                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-muted-foreground">{s.funding_type}</span>
+                    {s.degree_level && <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-muted-foreground">{s.degree_level}</span>}
+                    {s.funding_type && <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-muted-foreground">{s.funding_type}</span>}
                   </div>
                   {s.deadline && (
                     <p className="mt-2 text-xs text-muted-foreground">Deadline: {s.deadline}</p>

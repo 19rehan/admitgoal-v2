@@ -148,8 +148,11 @@ export default function ProfileEditPage() {
 
   // Calculate profile completion
   const getCompletion = () => {
-    const fields = [fullName, country, nationality, degreeLevel, fieldOfStudy, gpa, ieltsScore, preferredCountries, fundingPreference]
-    const filled = fields.filter((f) => f && f.trim() !== "").length
+    const filled = fields.filter((f: any) => {
+      if (!f) return false
+      if (Array.isArray(f)) return f.length > 0
+      return String(f).trim() !== ""
+    }).length
     return Math.round((filled / fields.length) * 100)
   }
 

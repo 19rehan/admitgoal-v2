@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation"
 import {
   ChevronRight,
   Bookmark,
-  Bell,
   ExternalLink,
   DollarSign,
   Calendar,
@@ -63,6 +62,7 @@ export default function ScholarshipDetailPage({ params }: { params: Promise<{ id
       setScholarship(null)
       setRelated([])
       setLoading(true)
+      setSaved(false)
 
       // Fetch scholarship details
       const { data, error } = await supabase
@@ -79,15 +79,36 @@ export default function ScholarshipDetailPage({ params }: { params: Promise<{ id
 
       setScholarship(data)
 
-      // Fetch related scholarships (same country or degree level)
-      const { data: relatedData } = await supabase
-        .from("scholarship_details")
-        .select("id, title, university_name, country, degree_level, funding_type, deadline, last_updated")
-        .neq("id", id)
-        .or(`country.eq.${data.country},degree_level.eq.${data.degree_level},funding_type.eq.${data.funding_type}`)
-        .limit(6)
+      // Fetch related scholarships with null-safe filters
+      let relatedData: any[] = []
 
-      setRelated(relatedData || [])
+      const filters: string[] = []
+      if (data.country) filters.push(`country.eq.${data.country}`)
+      if (data.degree_level) filters.push(`degree_level.eq.${data.degree_level}`)
+      if (data.funding_type) filters.push(`funding_type.eq.${data.funding_type}`)
+
+      if (filters.length > 0) {
+        const { data: rData } = await supabase
+          .from("scholarship_details")
+          .select("id, title, university_name, country, degree_level, funding_type, deadline, last_updated")
+          .neq("id", id)
+          .or(filters.join(","))
+          .limit(6)
+        relatedData = rData || []
+      }
+
+      // Fallback: if no related found, get latest scholarships
+      if (relatedData.length === 0) {
+        const { data: fallback } = await supabase
+          .from("scholarship_details")
+          .select("id, title, university_name, country, degree_level, funding_type, deadline, last_updated")
+          .neq("id", id)
+          .order("last_updated", { ascending: false })
+          .limit(6)
+        relatedData = fallback || []
+      }
+
+      setRelated(relatedData)
 
       // Check if user has saved this
       const { data: { session } } = await supabase.auth.getSession()

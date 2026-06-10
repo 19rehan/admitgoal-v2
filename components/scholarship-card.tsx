@@ -1,8 +1,9 @@
 "use client"
 
-import { Bookmark, Calendar, GraduationCap } from "lucide-react"
+import { Bookmark, Calendar, GraduationCap, Target } from "lucide-react"
 import { createClient } from "@supabase/supabase-js"
 import { useState, useEffect } from "react"
+import { calculateMatchScore } from "@/lib/match-score"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -28,6 +29,13 @@ function getFlag(country: string) {
   return "🌍"
 }
 
+function getScoreColor(score: number) {
+  if (score >= 80) return "oklch(0.7 0.16 155)" // green
+  if (score >= 60) return "oklch(0.78 0.15 75)" // gold
+  if (score >= 40) return "oklch(0.72 0.18 300)" // purple
+  return "oklch(0.6 0.1 285)" // muted
+}
+
 export function ScholarshipCard({
   scholarship,
   isSaved: initialSaved,
@@ -42,23 +50,35 @@ export function ScholarshipCard({
   const flag = getFlag(s.country)
   const [saved, setSaved] = useState(initialSaved)
   const [saving, setSaving] = useState(false)
+  const [matchScore, setMatchScore] = useState<number | null>(null)
 
   useEffect(() => {
-    // Check if user has saved this scholarship
-    const checkSaved = async () => {
+    const init = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
 
+      // Check saved status
       const { data } = await supabase
         .from("user_saved_scholarships")
         .select("id")
         .eq("user_id", session.user.id)
         .eq("scholarship_id", s.id)
         .single()
-
       setSaved(!!data)
+
+      // Get profile and calculate match score
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .single()
+
+      if (profile) {
+        const score = calculateMatchScore(profile, s)
+        setMatchScore(score)
+      }
     }
-    checkSaved()
+    init()
   }, [s.id])
 
   const handleSave = async () => {
@@ -104,16 +124,27 @@ export function ScholarshipCard({
           <span className="text-xl">{flag}</span>
           <span className="text-sm font-medium text-muted-foreground">{s.country || "International"}</span>
         </div>
-        <span
-          className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
-          style={
-            fully
-              ? { background: "oklch(0.55 0.16 150 / 0.18)", color: "oklch(0.8 0.16 155)" }
-              : { background: "oklch(0.78 0.15 75 / 0.18)", color: "oklch(0.82 0.15 78)" }
-          }
-        >
-          {s.funding_type || "Scholarship"}
-        </span>
+        <div className="flex items-center gap-2">
+          {matchScore !== null && (
+            <span
+              className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold"
+              style={{ background: `color-mix(in oklch, ${getScoreColor(matchScore)} 18%, transparent)`, color: getScoreColor(matchScore) }}
+            >
+              <Target className="size-3" />
+              {matchScore}%
+            </span>
+          )}
+          <span
+            className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+            style={
+              fully
+                ? { background: "oklch(0.55 0.16 150 / 0.18)", color: "oklch(0.8 0.16 155)" }
+                : { background: "oklch(0.78 0.15 75 / 0.18)", color: "oklch(0.82 0.15 78)" }
+            }
+          >
+            {s.funding_type || "Scholarship"}
+          </span>
+        </div>
       </div>
 
       <h3 className="mt-3 line-clamp-2 text-lg font-bold leading-snug text-foreground">{s.title}</h3>
