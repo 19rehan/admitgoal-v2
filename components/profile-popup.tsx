@@ -2,16 +2,30 @@
 
 import { useEffect, useState } from "react"
 import { X, GraduationCap } from "lucide-react"
+import { createClient } from "@supabase/supabase-js"
 
-export function ProfilePopup({ isLoggedIn }: { isLoggedIn: boolean }) {
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
+export function ProfilePopup() {
   const [show, setShow] = useState(false)
   const [closed, setClosed] = useState(false)
 
   useEffect(() => {
-    if (isLoggedIn || closed) return
-    const timer = setTimeout(() => setShow(true), 8000)
-    return () => clearTimeout(timer)
-  }, [isLoggedIn, closed])
+    if (closed) return
+
+    const checkAndShow = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      // Only show popup if user is NOT logged in
+      if (!session) {
+        const timer = setTimeout(() => setShow(true), 8000)
+        return () => clearTimeout(timer)
+      }
+    }
+    checkAndShow()
+  }, [closed])
 
   if (!show || closed) return null
 
@@ -40,9 +54,9 @@ export function ProfilePopup({ isLoggedIn }: { isLoggedIn: boolean }) {
           </p>
         </div>
       </div>
-      <button className="mt-4 w-full rounded-xl bg-gradient-to-r from-brand to-brand-2 py-2.5 text-sm font-semibold text-white shadow-[0_0_16px_rgba(139,92,246,0.4)] transition-transform hover:scale-[1.02]">
+      <a href="/signup" className="mt-4 block w-full rounded-xl bg-gradient-to-r from-brand to-brand-2 py-2.5 text-center text-sm font-semibold text-white shadow-[0_0_16px_rgba(139,92,246,0.4)] transition-transform hover:scale-[1.02]">
         Create Free Profile
-      </button>
+      </a>
     </div>
   )
 }

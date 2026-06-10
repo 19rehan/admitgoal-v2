@@ -1,4 +1,13 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import { Rocket, ArrowRight } from "lucide-react"
+import { createClient } from "@supabase/supabase-js"
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 function GradientOrbs() {
   return (
@@ -47,6 +56,18 @@ function MiniCard({
 }
 
 export function Hero() {
+  const [totalCount, setTotalCount] = useState(250)
+
+  useEffect(() => {
+    const getCount = async () => {
+      const { count } = await supabase
+        .from("scholarship_details")
+        .select("*", { count: "exact", head: true })
+      if (count) setTotalCount(count)
+    }
+    getCount()
+  }, [])
+
   return (
     <section id="home" className="relative flex min-h-screen items-center overflow-hidden pt-24 pb-16">
       <GradientOrbs />
@@ -65,7 +86,7 @@ export function Hero() {
           </h1>
           <p className="mx-auto mt-6 max-w-xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg lg:mx-0">
             AI-powered scholarship matching for students from Pakistan, India, Bangladesh and Africa.
-            250+ scholarships. Zero cost.
+            {totalCount}+ scholarships. Zero cost.
           </p>
           <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row lg:items-start lg:justify-start">
             <a
@@ -83,7 +104,7 @@ export function Hero() {
             </a>
           </div>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-2.5 lg:justify-start">
-            {["250+ Scholarships", "50+ Countries", "100% Free Forever"].map((b) => (
+            {[`${totalCount}+ Scholarships`, "50+ Countries", "100% Free Forever"].map((b) => (
               <span
                 key={b}
                 className="glass rounded-full px-3.5 py-1.5 text-xs font-medium text-muted-foreground"

@@ -13,8 +13,6 @@ import { Footer } from "@/components/footer"
 import { ProfilePopup } from "@/components/profile-popup"
 
 export default function Page() {
-  // Toggle to true to preview the logged-in experience (avatar, match %).
-  const [isLoggedIn] = useState(false)
   const [savedIds, setSavedIds] = useState<string[]>([])
 
   const toggleSave = (id: string) =>
@@ -22,16 +20,16 @@ export default function Page() {
 
   return (
     <main className="relative min-h-screen overflow-x-hidden bg-background">
-      <Navbar isLoggedIn={isLoggedIn} />
+      <Navbar />
       <Hero />
-      <ScholarshipsSection isLoggedIn={isLoggedIn} savedIds={savedIds} onToggleSave={toggleSave} />
+      <ScholarshipsSection savedIds={savedIds} onToggleSave={toggleSave} />
       <HowItWorks />
       <Stats />
       <Features />
       <Testimonials />
       <CtaBanner />
       <Footer />
-      <ProfilePopup isLoggedIn={isLoggedIn} />
+      <ProfilePopup />
     </main>
   )
 }

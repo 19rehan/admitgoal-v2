@@ -1,13 +1,12 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { createClient } from "@supabase/supabase-js"
 
-const stats = [
-  { value: 250, suffix: "+", label: "Scholarships Listed" },
-  { value: 50, suffix: "+", label: "Countries Covered" },
-  { value: 6, suffix: "hrs", label: "Update Frequency" },
-  { value: 100, suffix: "%", label: "Free Forever" },
-]
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 function CountUp({ target, suffix }: { target: number; suffix: string }) {
   const [value, setValue] = useState(0)
@@ -47,6 +46,36 @@ function CountUp({ target, suffix }: { target: number; suffix: string }) {
 }
 
 export function Stats() {
+  const [scholarshipCount, setScholarshipCount] = useState(250)
+  const [countryCount, setCountryCount] = useState(50)
+
+  useEffect(() => {
+    const getCounts = async () => {
+      // Total scholarships
+      const { count } = await supabase
+        .from("scholarship_details")
+        .select("*", { count: "exact", head: true })
+      if (count) setScholarshipCount(count)
+
+      // Unique countries
+      const { data } = await supabase
+        .from("scholarship_details")
+        .select("country")
+      if (data) {
+        const unique = new Set(data.map((d: any) => d.country).filter(Boolean))
+        setCountryCount(unique.size)
+      }
+    }
+    getCounts()
+  }, [])
+
+  const stats = [
+    { value: scholarshipCount, suffix: "+", label: "Scholarships Listed" },
+    { value: countryCount, suffix: "+", label: "Countries Covered" },
+    { value: 6, suffix: "hrs", label: "Update Frequency" },
+    { value: 100, suffix: "%", label: "Free Forever" },
+  ]
+
   return (
     <section className="relative overflow-hidden py-16">
       <div

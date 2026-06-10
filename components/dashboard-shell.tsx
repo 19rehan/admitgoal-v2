@@ -1,8 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { useState } from "react"
+import { usePathname, useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
 import {
   LayoutDashboard,
   Bookmark,
@@ -16,7 +16,12 @@ import {
   X,
 } from "lucide-react"
 import { GradientOrbs } from "@/components/gradient-orbs"
-import { currentUser } from "@/lib/scholarships"
+import { createClient } from "@supabase/supabase-js"
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 const nav = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -63,26 +68,75 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   )
 }
 
-function UserCard() {
+function UserCard({ user, profileName, onLogout }: { user: any; profileName: string; onLogout: () => void }) {
+  const name = profileName || user?.user_metadata?.full_name || user?.email?.split("@")[0] || "User"
+  const email = user?.email || ""
+  const initials = (() => {
+    if (profileName) {
+      const parts = profileName.split(" ")
+      return (parts[0]?.[0] || "") + (parts[1]?.[0] || "")
+    }
+    if (user?.user_metadata?.full_name) {
+      const parts = user.user_metadata.full_name.split(" ")
+      return (parts[0]?.[0] || "") + (parts[1]?.[0] || "")
+    }
+    return email?.[0]?.toUpperCase() || "U"
+  })()
+
   return (
     <div className="glass flex items-center gap-3 rounded-xl p-3">
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand to-brand-2 text-sm font-semibold text-white">
-        {currentUser.initials}
-      </span>
+      {user?.user_metadata?.avatar_url ? (
+        <img src={user.user_metadata.avatar_url} alt="Avatar" className="size-10 shrink-0 rounded-full" />
+      ) : (
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand to-brand-2 text-sm font-semibold text-white">
+          {initials}
+        </span>
+      )}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-foreground">{currentUser.name}</p>
-        <p className="truncate text-xs text-muted-foreground">{currentUser.email}</p>
+        <p className="truncate text-sm font-semibold text-foreground">{name}</p>
+        <p className="truncate text-xs text-muted-foreground">{email}</p>
       </div>
-      <Link href="/login" aria-label="Log out" className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground">
+      <button onClick={onLogout} aria-label="Log out" className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground">
         <LogOut className="size-4" />
-      </Link>
+      </button>
     </div>
   )
 }
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const router = useRouter()
   const [open, setOpen] = useState(false)
+  const [user, setUser] = useState<any>(null)
+  const [profileName, setProfileName] = useState<string>("")
+
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) {
+        router.push("/login")
+        return
+      }
+      setUser(session.user)
+
+      // Get name from user_profiles table
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("full_name")
+        .eq("user_id", session.user.id)
+        .single()
+
+      if (profile?.full_name) {
+        setProfileName(profile.full_name)
+      }
+    }
+    getUser()
+  }, [router])
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    router.push("/")
+  }
 
   return (
     <div className="min-h-screen">
@@ -99,7 +153,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         <div className="flex-1 overflow-y-auto no-scrollbar">
           <NavLinks />
         </div>
-        <UserCard />
+        {user && <UserCard user={user} profileName={profileName} onLogout={handleLogout} />}
       </aside>
 
       {/* Mobile top bar */}
@@ -129,7 +183,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <div className="flex-1">
               <NavLinks onNavigate={() => setOpen(false)} />
             </div>
-            <UserCard />
+            {user && <UserCard user={user} profileName={profileName} onLogout={handleLogout} />}
           </div>
         </div>
       )}

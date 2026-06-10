@@ -2,8 +2,14 @@
 
 import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Menu, X, GraduationCap, ChevronDown, Bell } from "lucide-react"
-import { notifications as notifData, currentUser } from "@/lib/scholarships"
+import { createClient } from "@supabase/supabase-js"
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 const links = [
   { label: "Home", href: "/#home" },
@@ -18,21 +24,49 @@ const menuItems = [
   { label: "Applications", href: "/applications" },
   { label: "Reminders", href: "/reminders" },
   { label: "Profile", href: "/profile/edit" },
-  { label: "Logout", href: "/login" },
 ]
 
-function dotFor(icon: string) {
-  if (icon === "deadline") return "oklch(0.65 0.2 25)"
-  if (icon === "match") return "oklch(0.75 0.16 155)"
-  return "oklch(0.72 0.18 300)"
-}
-
-export function Navbar({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
+export function Navbar() {
+  const router = useRouter()
   const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [bellOpen, setBellOpen] = useState(false)
+  const [user, setUser] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
   const ref = useRef<HTMLDivElement>(null)
+  const [profileName, setProfileName] = useState("")
+
+  // Get real auth state
+  // Get real auth state
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      setUser(session?.user ?? null)
+
+      // Also get profile name from database
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from("user_profiles")
+          .select("full_name")
+          .eq("user_id", session.user.id)
+          .single()
+
+        if (profile?.full_name) {
+          setProfileName(profile.full_name)
+        }
+      }
+
+      setLoading(false)
+    }
+    getUser()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8)
@@ -43,9 +77,7 @@ export function Navbar({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
 
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? "hidden" : ""
-    return () => {
-      document.body.style.overflow = ""
-    }
+    return () => { document.body.style.overflow = "" }
   }, [mobileOpen])
 
   useEffect(() => {
@@ -59,7 +91,29 @@ export function Navbar({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
     return () => document.removeEventListener("mousedown", onClick)
   }, [])
 
-  const unread = notifData.filter((n) => n.unread).length
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    setUser(null)
+    setMenuOpen(false)
+    router.push("/")
+  }
+
+  // Get user initials from name or email
+  const getUserInitials = () => {
+    if (!user) return ""
+    const name = profileName || user.user_metadata?.full_name || user.email || ""
+    if (profileName) {
+      const parts = profileName.split(" ")
+      return (parts[0]?.[0] || "") + (parts[1]?.[0] || "")
+    }
+    if (user.user_metadata?.full_name) {
+      const parts = user.user_metadata.full_name.split(" ")
+      return (parts[0]?.[0] || "") + (parts[1]?.[0] || "")
+    }
+    return user.email?.[0]?.toUpperCase() || "U"
+  }
+
+  const isLoggedIn = !!user
 
   return (
     <header
@@ -92,7 +146,9 @@ export function Navbar({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
         </div>
 
         <div className="hidden items-center gap-3 md:flex" ref={ref}>
-          {isLoggedIn ? (
+          {loading ? (
+            <div className="size-9 animate-pulse rounded-full bg-white/10" />
+          ) : isLoggedIn ? (
             <>
               <div className="relative">
                 <button
@@ -104,28 +160,14 @@ export function Navbar({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
                   className="relative rounded-full p-2 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
                 >
                   <Bell className="size-5" />
-                  {unread > 0 && (
-                    <span className="absolute right-1 top-1 flex size-4 items-center justify-center rounded-full bg-[oklch(0.62_0.22_25)] text-[9px] font-bold text-white">
-                      {unread}
-                    </span>
-                  )}
                 </button>
                 {bellOpen && (
                   <div className="glass absolute right-0 mt-2 w-80 rounded-2xl p-2" style={{ background: "rgba(26,26,46,0.95)" }}>
                     <div className="flex items-center justify-between px-3 py-2">
                       <span className="text-sm font-semibold text-foreground">Notifications</span>
-                      <button className="text-xs font-medium text-[oklch(0.72_0.18_300)] hover:underline">Mark all read</button>
                     </div>
-                    <div className="flex flex-col gap-1">
-                      {notifData.map((n) => (
-                        <div key={n.id} className="flex items-start gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-white/5">
-                          <span className="mt-1.5 size-2 shrink-0 rounded-full" style={{ background: dotFor(n.icon) }} />
-                          <div className="min-w-0">
-                            <p className="text-sm text-foreground">{n.text}</p>
-                            <p className="text-xs text-muted-foreground">{n.time}</p>
-                          </div>
-                        </div>
-                      ))}
+                    <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                      No new notifications
                     </div>
                     <Link href="/reminders" className="mt-1 block rounded-xl px-3 py-2.5 text-center text-sm font-medium text-[oklch(0.72_0.18_300)] transition-colors hover:bg-white/5">
                       View All Notifications
@@ -142,22 +184,41 @@ export function Navbar({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
                   }}
                   className="flex items-center gap-2 rounded-full p-1 pr-2 transition-colors hover:bg-white/5"
                 >
-                  <span className="flex size-9 items-center justify-center rounded-full bg-gradient-to-br from-brand to-brand-2 text-sm font-semibold text-white">
-                    {currentUser.initials}
-                  </span>
+                  {user.user_metadata?.avatar_url ? (
+                    <img
+                      src={user.user_metadata.avatar_url}
+                      alt="Avatar"
+                      className="size-9 rounded-full"
+                    />
+                  ) : (
+                    <span className="flex size-9 items-center justify-center rounded-full bg-gradient-to-br from-brand to-brand-2 text-sm font-semibold text-white">
+                      {getUserInitials()}
+                    </span>
+                  )}
                   <ChevronDown className="size-4 text-muted-foreground" />
                 </button>
                 {menuOpen && (
                   <div className="glass absolute right-0 mt-2 w-48 rounded-xl p-1.5 text-sm" style={{ background: "rgba(26,26,46,0.95)" }}>
+                    <div className="border-b border-white/10 px-3 py-2 mb-1">
+                      <p className="font-medium text-foreground truncate">{profileName || user.user_metadata?.full_name || "User"}</p>
+                      <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                    </div>
                     {menuItems.map((i) => (
                       <Link
                         key={i.label}
                         href={i.href}
+                        onClick={() => setMenuOpen(false)}
                         className="block rounded-lg px-3 py-2 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
                       >
                         {i.label}
                       </Link>
                     ))}
+                    <button
+                      onClick={handleLogout}
+                      className="w-full rounded-lg px-3 py-2 text-left text-red-400 transition-colors hover:bg-white/5"
+                    >
+                      Logout
+                    </button>
                   </div>
                 )}
               </div>
@@ -208,9 +269,9 @@ export function Navbar({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
                   <Link href="/dashboard" onClick={() => setMobileOpen(false)} className="rounded-xl bg-gradient-to-r from-brand to-brand-2 py-3 text-center text-base font-semibold text-white shadow-[0_0_18px_rgba(139,92,246,0.45)]">
                     Dashboard
                   </Link>
-                  <Link href="/login" onClick={() => setMobileOpen(false)} className="rounded-xl border border-white/15 py-3 text-center text-base font-medium text-foreground">
+                  <button onClick={handleLogout} className="rounded-xl border border-white/15 py-3 text-center text-base font-medium text-red-400">
                     Logout
-                  </Link>
+                  </button>
                 </>
               ) : (
                 <>

@@ -1,3 +1,14 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { createClient } from "@supabase/supabase-js"
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
 function Particles() {
   const dots = Array.from({ length: 18 })
   return (
@@ -18,6 +29,17 @@ function Particles() {
 }
 
 export function CtaBanner() {
+  const router = useRouter()
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      setIsLoggedIn(!!session)
+    }
+    checkAuth()
+  }, [])
+
   return (
     <section className="relative overflow-hidden py-24">
       <div
@@ -43,12 +65,14 @@ export function CtaBanner() {
           >
             Browse Scholarships
           </a>
-          <a
-            href="#home"
-            className="w-full rounded-xl border border-white/20 px-8 py-3.5 text-base font-semibold text-foreground transition-colors hover:bg-white/5 sm:w-auto"
-          >
-            Create Free Profile
-          </a>
+          {!isLoggedIn && (
+            <button
+              onClick={() => router.push("/signup")}
+              className="w-full rounded-xl border border-white/20 px-8 py-3.5 text-base font-semibold text-foreground transition-colors hover:bg-white/5 sm:w-auto"
+            >
+              Create Free Profile
+            </button>
+          )}
         </div>
       </div>
     </section>

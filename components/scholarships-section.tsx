@@ -1,51 +1,101 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Search } from "lucide-react"
-import { scholarships, filterChips } from "@/lib/scholarships"
+import Link from "next/link"
 import { ScholarshipCard, ScholarshipCardSkeleton } from "@/components/scholarship-card"
+import { createClient } from "@supabase/supabase-js"
 
-const sortOptions = ["Latest", "Deadline", "Match %"]
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
+const filterChips = [
+  "All",
+  "Fully Funded",
+  "Partial",
+  "Masters",
+  "PhD",
+  "Bachelor",
+  "UK",
+  "Germany",
+  "USA",
+  "Canada",
+  "Australia",
+  "Turkey",
+  "China",
+  "Europe",
+]
 
 export function ScholarshipsSection({
-  isLoggedIn,
   savedIds,
   onToggleSave,
 }: {
-  isLoggedIn: boolean
   savedIds: string[]
   onToggleSave: (id: string) => void
 }) {
+  const [scholarships, setScholarships] = useState<any[]>([])
   const [query, setQuery] = useState("")
   const [activeFilter, setActiveFilter] = useState("All")
-  const [sort, setSort] = useState("Latest")
-  const [visible, setVisible] = useState(6)
-  const [loading] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [totalCount, setTotalCount] = useState(0)
+
+  useEffect(() => {
+    const fetchScholarships = async () => {
+      setLoading(true)
+
+      const { count } = await supabase
+        .from("scholarship_details")
+        .select("*", { count: "exact", head: true })
+
+      setTotalCount(count || 0)
+
+      // Load ALL scholarships for proper search/filter
+      const { data, error } = await supabase
+        .from("scholarship_details")
+        .select("id, title, university_name, country, degree_level, funding_type, deadline, last_updated")
+        .order("last_updated", { ascending: false })
+
+      if (error) {
+        console.error("Fetch error:", error)
+      } else {
+        setScholarships(data || [])
+      }
+
+      setLoading(false)
+    }
+    fetchScholarships()
+  }, [])
 
   const filtered = useMemo(() => {
-    let list = scholarships.filter((s) => {
+    return scholarships.filter((s) => {
       const q = query.trim().toLowerCase()
       const matchesQuery =
         !q ||
-        s.title.toLowerCase().includes(q) ||
-        s.university_name.toLowerCase().includes(q) ||
-        s.country.toLowerCase().includes(q)
+        (s.title || "").toLowerCase().includes(q) ||
+        (s.university_name || "").toLowerCase().includes(q) ||
+        (s.country || "").toLowerCase().includes(q) ||
+        (s.degree_level || "").toLowerCase().includes(q)
+
       const matchesFilter =
         activeFilter === "All" ||
-        (activeFilter === "Fully Funded" && s.funding_type === "Fully Funded") ||
-        s.degree_level.toLowerCase().includes(activeFilter.toLowerCase()) ||
-        s.country.toLowerCase().includes(activeFilter.toLowerCase())
+        (activeFilter === "Fully Funded" && (s.funding_type || "").toLowerCase().includes("fully")) ||
+        (activeFilter === "Partial" && (s.funding_type || "").toLowerCase().includes("partial")) ||
+        (s.degree_level || "").toLowerCase().includes(activeFilter.toLowerCase()) ||
+        (s.country || "").toLowerCase().includes(activeFilter.toLowerCase())
+
       return matchesQuery && matchesFilter
     })
-    if (sort === "Match %") list = [...list].sort((a, b) => b.match_percentage - a.match_percentage)
-    return list
-  }, [query, activeFilter, sort])
+  }, [scholarships, query, activeFilter])
 
   return (
     <section id="scholarships" className="relative mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
       {/* Search container */}
       <div className="glass rounded-3xl p-6 sm:p-8">
-        <h2 className="text-2xl font-bold text-foreground sm:text-3xl">Search 250+ Scholarships</h2>
+        <h2 className="text-2xl font-bold text-foreground sm:text-3xl">
+          Search {totalCount > 0 ? `${totalCount}+` : ""} Scholarships
+        </h2>
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
@@ -56,9 +106,12 @@ export function ScholarshipsSection({
               className="w-full rounded-xl border border-white/10 bg-white/5 py-3.5 pl-12 pr-4 text-sm text-foreground outline-none transition-all placeholder:text-muted-foreground focus:border-brand focus:shadow-[0_0_0_3px_rgba(139,92,246,0.25)]"
             />
           </div>
-          <button className="rounded-xl bg-gradient-to-r from-brand to-brand-2 px-8 py-3.5 text-sm font-semibold text-white shadow-[0_0_18px_rgba(139,92,246,0.4)] transition-transform hover:scale-[1.02]">
-            Search
-          </button>
+          <Link
+            href="/scholarships"
+            className="rounded-xl bg-gradient-to-r from-brand to-brand-2 px-8 py-3.5 text-center text-sm font-semibold text-white shadow-[0_0_18px_rgba(139,92,246,0.4)] transition-transform hover:scale-[1.02]"
+          >
+            View All
+          </Link>
         </div>
 
         <div className="no-scrollbar mt-5 flex gap-2 overflow-x-auto pb-1">
@@ -80,38 +133,33 @@ export function ScholarshipsSection({
           })}
         </div>
 
-        <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
-          <span>Sort by:</span>
-          {sortOptions
-            .filter((o) => isLoggedIn || o !== "Match %")
-            .map((o) => (
-              <button
-                key={o}
-                onClick={() => setSort(o)}
-                className={`transition-colors ${sort === o ? "font-semibold text-foreground" : "hover:text-foreground"}`}
-              >
-                {o}
-              </button>
-            ))}
-        </div>
+        {/* Show result count when searching */}
+        {(query.trim() || activeFilter !== "All") && !loading && (
+          <p className="mt-4 text-sm text-muted-foreground">
+            Found {filtered.length} scholarship{filtered.length !== 1 ? "s" : ""}
+            {query.trim() && ` for "${query}"`}
+            {activeFilter !== "All" && ` in ${activeFilter}`}
+          </p>
+        )}
       </div>
 
-      {/* Grid */}
+      {/* Grid — show only 9 on homepage */}
       <div className="mt-12">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-          <h2 className="text-2xl font-bold text-foreground sm:text-3xl">Latest Scholarships</h2>
+          <h2 className="text-2xl font-bold text-foreground sm:text-3xl">
+            {query.trim() || activeFilter !== "All" ? "Search Results" : "Latest Scholarships"}
+          </h2>
           <p className="text-sm text-muted-foreground">Updated every 6 hours automatically</p>
         </div>
 
         <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {loading
-            ? Array.from({ length: 6 }).map((_, i) => <ScholarshipCardSkeleton key={i} />)
-            : filtered.slice(0, visible).map((s) => (
+            ? Array.from({ length: 9 }).map((_, i) => <ScholarshipCardSkeleton key={i} />)
+            : filtered.slice(0, 9).map((s) => (
                 <ScholarshipCard
                   key={s.id}
                   scholarship={s}
-                  isLoggedIn={isLoggedIn}
-                  isSaved={savedIds.includes(s.id)}
+                  isSaved={savedIds.includes(String(s.id))}
                   onToggleSave={onToggleSave}
                 />
               ))}
@@ -121,14 +169,15 @@ export function ScholarshipsSection({
           <p className="mt-12 text-center text-muted-foreground">No scholarships match your search.</p>
         )}
 
-        {!loading && visible < filtered.length && (
+        {/* View All button */}
+        {!loading && filtered.length > 9 && (
           <div className="mt-10 flex justify-center">
-            <button
-              onClick={() => setVisible((v) => v + 3)}
+            <Link
+              href="/scholarships"
               className="rounded-xl border border-white/15 px-8 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-white/5"
             >
-              Load More
-            </button>
+              View All {totalCount}+ Scholarships →
+            </Link>
           </div>
         )}
       </div>

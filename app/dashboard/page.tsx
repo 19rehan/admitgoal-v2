@@ -1,62 +1,148 @@
 "use client"
 
 import Link from "next/link"
-import { useState } from "react"
-import { Bell, Bookmark, Send, Sparkles, Clock, ArrowRight, Edit3 } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Bell, Bookmark, Send, Sparkles, Clock, ArrowRight, Edit3, Loader2 } from "lucide-react"
 import { DashboardShell } from "@/components/dashboard-shell"
 import { StatCard } from "@/components/stat-card"
-import { SavedCard } from "@/components/saved-card"
 import { ReminderModal } from "@/components/reminder-modal"
-import {
-  scholarships,
-  applications,
-  currentUser,
-  notifications,
-  type Scholarship,
-  type AppStatus,
-} from "@/lib/scholarships"
+import { createClient } from "@supabase/supabase-js"
 
-const statusStyles: Record<AppStatus, { color: string; bg: string }> = {
-  Planning: { color: "oklch(0.75 0.02 285)", bg: "rgba(255,255,255,0.08)" },
-  Applying: { color: "oklch(0.7 0.15 250)", bg: "oklch(0.6 0.15 250 / 0.18)" },
-  Submitted: { color: "oklch(0.78 0.14 300)", bg: "oklch(0.62 0.21 280 / 0.2)" },
-  Accepted: { color: "oklch(0.8 0.16 155)", bg: "oklch(0.55 0.16 150 / 0.18)" },
-  Rejected: { color: "oklch(0.72 0.18 25)", bg: "oklch(0.62 0.2 25 / 0.18)" },
-}
-
-const recentSaved = scholarships.slice(0, 3)
-const deadlines = scholarships.slice(0, 3).map((s, i) => ({ s, days: [6, 21, 33][i] }))
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 export default function DashboardPage() {
-  const [reminderFor, setReminderFor] = useState<Scholarship | null>(null)
-  const unread = notifications.filter((n) => n.unread).length
+  const [user, setUser] = useState<any>(null)
+  const [profile, setProfile] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [savedCount, setSavedCount] = useState(0)
+  const [appCount, setAppCount] = useState(0)
+  const [savedScholarships, setSavedScholarships] = useState<any[]>([])
+  const [upcomingDeadlines, setUpcomingDeadlines] = useState<any[]>([])
+
+  useEffect(() => {
+    const loadDashboard = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) return
+
+      setUser(session.user)
+
+      // Load profile
+      const { data: profileData } = await supabase
+        .from("user_profiles")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .single()
+
+      setProfile(profileData)
+
+      // Count saved scholarships
+      const { count: savedC } = await supabase
+        .from("user_saved_scholarships")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", session.user.id)
+
+      setSavedCount(savedC || 0)
+
+      // Count applications
+      const { count: appC } = await supabase
+        .from("user_applications")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", session.user.id)
+
+      setAppCount(appC || 0)
+
+      // Get recently saved scholarships (last 3)
+      const { data: savedData } = await supabase
+        .from("user_saved_scholarships")
+        .select("scholarship_id, saved_at")
+        .eq("user_id", session.user.id)
+        .order("saved_at", { ascending: false })
+        .limit(3)
+
+      if (savedData && savedData.length > 0) {
+        const ids = savedData.map((s: any) => s.scholarship_id)
+        const { data: schData } = await supabase
+          .from("scholarship_details")
+          .select("id, title, university_name, country, degree_level, funding_type, deadline")
+          .in("id", ids)
+
+        setSavedScholarships(schData || [])
+      }
+
+      // Get upcoming deadlines (scholarships with nearest deadlines)
+      const { data: deadlineData } = await supabase
+        .from("scholarship_details")
+        .select("id, title, university_name, country, deadline")
+        .gte("deadline", new Date().toISOString().split("T")[0])
+        .order("deadline", { ascending: true })
+        .limit(3)
+
+      setUpcomingDeadlines(deadlineData || [])
+
+      setLoading(false)
+    }
+    loadDashboard()
+  }, [])
+
+  // Calculate profile completion
+  const getCompletion = () => {
+    if (!profile) return 0
+    const fields = [profile.full_name, profile.country, profile.nationality, profile.degree_level, profile.field_of_study, profile.gpa, profile.ielts_score, profile.preferred_countries, profile.funding_preference]
+    const filled = fields.filter((f: any) => f && String(f).trim() !== "").length
+    return Math.round((filled / fields.length) * 100)
+  }
+
+  const getFirstName = () => {
+    if (profile?.full_name) return profile.full_name.split(" ")[0]
+    if (user?.user_metadata?.full_name) return user.user_metadata.full_name.split(" ")[0]
+    return user?.email?.split("@")[0] || "there"
+  }
+
+  const getDaysLeft = (deadline: string) => {
+    if (!deadline) return null
+    const diff = Math.ceil((new Date(deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    return diff > 0 ? diff : null
+  }
+
+  const getFlag = (country: string) => {
+    const flags: Record<string, string> = {
+      "United Kingdom": "🇬🇧", "Germany": "🇩🇪", "Turkey": "🇹🇷", "China": "🇨🇳",
+      "USA": "🇺🇸", "Canada": "🇨🇦", "Australia": "🇦🇺", "Japan": "🇯🇵",
+      "South Korea": "🇰🇷", "France": "🇫🇷", "Netherlands": "🇳🇱", "Sweden": "🇸🇪",
+      "Italy": "🇮🇹", "Spain": "🇪🇸", "Europe": "🇪🇺", "Malaysia": "🇲🇾",
+    }
+    return flags[country] || "🌍"
+  }
+
+  if (loading) {
+    return (
+      <DashboardShell>
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <Loader2 className="size-8 animate-spin text-primary" />
+        </div>
+      </DashboardShell>
+    )
+  }
 
   return (
     <DashboardShell>
-      <ReminderModal open={!!reminderFor} scholarshipTitle={reminderFor?.title ?? ""} onClose={() => setReminderFor(null)} />
-
       {/* Greeting */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground sm:text-3xl">Good morning, {currentUser.firstName}! 👋</h1>
-          <p className="mt-1 text-muted-foreground">You have 12 scholarships matching your profile</p>
+          <h1 className="text-2xl font-bold text-foreground sm:text-3xl">Good morning, {getFirstName()}! 👋</h1>
+          <p className="mt-1 text-muted-foreground">You have {savedCount} scholarships saved</p>
         </div>
-        <button aria-label="Notifications" className="relative rounded-full p-2.5 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground">
-          <Bell className="size-5" />
-          {unread > 0 && (
-            <span className="absolute right-1 top-1 flex size-4 items-center justify-center rounded-full bg-[oklch(0.62_0.22_25)] text-[9px] font-bold text-white">
-              {unread}
-            </span>
-          )}
-        </button>
       </div>
 
       {/* Stats */}
       <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard icon={Bookmark} value={8} label="Saved" glow="oklch(0.7 0.18 300)" />
-        <StatCard icon={Send} value={3} label="Applications" glow="oklch(0.7 0.16 155)" />
-        <StatCard icon={Sparkles} value={72} suffix="%" label="Profile Match" glow="oklch(0.78 0.15 75)" />
-        <StatCard icon={Clock} value={2} label="Deadlines Soon" glow="oklch(0.65 0.2 25)" />
+        <StatCard icon={Bookmark} value={savedCount} label="Saved" glow="oklch(0.7 0.18 300)" />
+        <StatCard icon={Send} value={appCount} label="Applications" glow="oklch(0.7 0.16 155)" />
+        <StatCard icon={Sparkles} value={getCompletion()} suffix="%" label="Profile Complete" glow="oklch(0.78 0.15 75)" />
+        <StatCard icon={Clock} value={upcomingDeadlines.length} label="Deadlines Soon" glow="oklch(0.65 0.2 25)" />
       </div>
 
       {/* AI Match Banner */}
@@ -70,10 +156,10 @@ export default function DashboardPage() {
               <Sparkles className="size-6 text-white" />
             </span>
             <div>
-              <p className="text-lg font-bold text-foreground">Your AI Match Score: {currentUser.completion}%</p>
-              <p className="text-sm text-muted-foreground">Complete your profile to find better matches</p>
+              <p className="text-lg font-bold text-foreground">Your Profile: {getCompletion()}% Complete</p>
+              <p className="text-sm text-muted-foreground">Complete your profile to find better scholarship matches</p>
               <div className="mt-3 h-2 w-full max-w-xs overflow-hidden rounded-full bg-white/10 sm:w-64">
-                <div className="h-full rounded-full bg-gradient-to-r from-brand to-brand-2" style={{ width: `${currentUser.completion}%` }} />
+                <div className="h-full rounded-full bg-gradient-to-r from-brand to-brand-2 transition-all duration-500" style={{ width: `${getCompletion()}%` }} />
               </div>
             </div>
           </div>
@@ -88,85 +174,78 @@ export default function DashboardPage() {
 
       {/* Recently Saved */}
       <SectionHeader title="Recently Saved" href="/saved" />
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-        {recentSaved.map((s) => (
-          <SavedCard
-            key={s.id}
-            scholarship={s}
-            onUnsave={() => {}}
-            onReminder={(sc) => setReminderFor(sc)}
-            onTrack={() => {}}
-          />
-        ))}
-      </div>
-
-      {/* Applications */}
-      <SectionHeader title="My Applications" href="/applications" />
-      <div className="glass overflow-hidden rounded-2xl" style={{ background: "rgba(26,26,46,0.55)" }}>
-        {applications.slice(0, 3).map((a, i) => {
-          const st = statusStyles[a.status]
-          const urgent = a.daysLeft <= 7
-          return (
-            <div
-              key={a.id}
-              className={`flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between ${i > 0 ? "border-t border-white/5" : ""}`}
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-xl">{a.flag}</span>
-                <div>
-                  <p className="font-semibold text-foreground">{a.title}</p>
-                  <p className="text-sm text-muted-foreground">{a.university}</p>
+      {savedScholarships.length > 0 ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {savedScholarships.map((s: any) => (
+            <div key={s.id} className="glass rounded-2xl p-4" style={{ background: "rgba(26,26,46,0.55)" }}>
+              <div className="flex items-start gap-3">
+                <span className="text-2xl">{getFlag(s.country)}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-foreground truncate">{s.title}</p>
+                  <p className="text-sm text-muted-foreground truncate">{s.university_name}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-muted-foreground">{s.degree_level}</span>
+                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-muted-foreground">{s.funding_type}</span>
+                  </div>
+                  {s.deadline && (
+                    <p className="mt-2 text-xs text-muted-foreground">Deadline: {s.deadline}</p>
+                  )}
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: st.bg, color: st.color }}>
-                  {a.status}
-                </span>
-                <span className="text-xs" style={urgent ? { color: "oklch(0.72 0.18 25)" } : { color: "var(--muted-foreground)" }}>
-                  {a.deadline} · {a.daysLeft}d left
-                </span>
-                <Link href="/applications" aria-label="Edit application" className="rounded-lg p-2 text-muted-foreground hover:bg-white/5 hover:text-foreground">
-                  <Edit3 className="size-4" />
-                </Link>
-              </div>
+              <Link href={`/scholarship/${s.id}`} className="mt-3 block rounded-lg border border-white/15 py-2 text-center text-xs font-semibold text-foreground hover:bg-white/5">
+                View Details
+              </Link>
             </div>
-          )
-        })}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="glass rounded-2xl p-8 text-center" style={{ background: "rgba(26,26,46,0.55)" }}>
+          <Bookmark className="mx-auto size-8 text-muted-foreground" />
+          <p className="mt-3 text-muted-foreground">No saved scholarships yet</p>
+          <Link href="/#scholarships" className="mt-3 inline-block rounded-lg bg-gradient-to-r from-brand to-brand-2 px-4 py-2 text-sm font-semibold text-white">
+            Browse Scholarships
+          </Link>
+        </div>
+      )}
 
       {/* Upcoming Deadlines */}
-      <SectionHeader title="Deadlines Coming Up" />
-      <div className="glass overflow-hidden rounded-2xl" style={{ background: "rgba(26,26,46,0.55)" }}>
-        {deadlines.map(({ s, days }, i) => {
-          const urgent = days <= 7
-          return (
-            <div key={s.id} className={`flex items-center justify-between gap-3 p-4 ${i > 0 ? "border-t border-white/5" : ""}`}>
-              <div className="flex items-center gap-3">
-                <span className="text-xl">{s.flag}</span>
-                <div>
-                  <p className="font-semibold text-foreground">{s.title}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {s.deadline} · {days} days remaining
-                  </p>
+      <SectionHeader title="Upcoming Deadlines" />
+      {upcomingDeadlines.length > 0 ? (
+        <div className="glass overflow-hidden rounded-2xl" style={{ background: "rgba(26,26,46,0.55)" }}>
+          {upcomingDeadlines.map((s: any, i: number) => {
+            const days = getDaysLeft(s.deadline)
+            const urgent = days !== null && days <= 7
+            return (
+              <div key={s.id} className={`flex items-center justify-between gap-3 p-4 ${i > 0 ? "border-t border-white/5" : ""}`}>
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">{getFlag(s.country)}</span>
+                  <div>
+                    <p className="font-semibold text-foreground">{s.title}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {s.deadline} {days !== null && `· ${days} days remaining`}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {urgent && (
+                    <span className="rounded-full bg-[oklch(0.62_0.2_25_/_0.18)] px-2.5 py-1 text-xs font-semibold text-[oklch(0.72_0.18_25)]">
+                      Urgent
+                    </span>
+                  )}
+                  <Link href={`/scholarship/${s.id}`} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-white/5">
+                    View
+                  </Link>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                {urgent && (
-                  <span className="rounded-full bg-[oklch(0.62_0.2_25_/_0.18)] px-2.5 py-1 text-xs font-semibold text-[oklch(0.72_0.18_25)]">
-                    Urgent
-                  </span>
-                )}
-                <button onClick={() => setReminderFor(s)} aria-label="Set reminder" className="rounded-lg p-2 text-muted-foreground hover:bg-white/5 hover:text-foreground">
-                  <Bell className="size-4" />
-                </button>
-                <Link href={`/scholarship/${s.id}`} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-white/5">
-                  View
-                </Link>
-              </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="glass rounded-2xl p-8 text-center" style={{ background: "rgba(26,26,46,0.55)" }}>
+          <Clock className="mx-auto size-8 text-muted-foreground" />
+          <p className="mt-3 text-muted-foreground">No upcoming deadlines found</p>
+        </div>
+      )}
     </DashboardShell>
   )
 }
