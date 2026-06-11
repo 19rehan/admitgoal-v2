@@ -1,9 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { Check, ArrowRight, ArrowLeft, GraduationCap, X, Sparkles, CheckCircle2 } from "lucide-react"
+import { Check, ArrowRight, ArrowLeft, GraduationCap, X, Sparkles, CheckCircle2, Search } from "lucide-react"
 import { GradientOrbs } from "@/components/gradient-orbs"
 import { createClient } from "@supabase/supabase-js"
 
@@ -155,7 +155,6 @@ export default function ProfileCreatePage() {
   const [saving, setSaving] = useState(false)
   const [user, setUser] = useState<any>(null)
 
-  // Form state
   const [fullName, setFullName] = useState("")
   const [country, setCountry] = useState("")
   const [nationality, setNationality] = useState("")
@@ -229,7 +228,7 @@ export default function ProfileCreatePage() {
   }
   const back = () => setStep((s) => Math.max(0, s - 1))
 
-  const filteredCountries = allCountries.filter(
+  const filteredPrefCountries = allCountries.filter(
     (c) => c.name.toLowerCase().includes(countryQuery.toLowerCase()) && !selectedCountries.includes(c.name),
   )
 
@@ -237,7 +236,7 @@ export default function ProfileCreatePage() {
     return (
       <main className="relative flex min-h-screen items-center justify-center p-6">
         <GradientOrbs />
-        <div className="glass animate-slide-in-br w-full max-w-md rounded-2xl p-8 text-center" style={{ background: "rgba(26,26,46,0.6)" }}>
+        <div className="w-full max-w-md rounded-2xl border border-white/10 p-8 text-center" style={{ background: "rgba(26,26,46,0.6)", backdropFilter: "blur(12px)" }}>
           <div className="relative mx-auto flex size-20 items-center justify-center">
             <span className="absolute inset-0 animate-ping rounded-full bg-purple-500/30" />
             <span className="relative flex size-20 items-center justify-center rounded-full bg-gradient-to-br from-purple-600 to-violet-600 shadow-[0_0_30px_rgba(139,92,246,0.6)]">
@@ -273,15 +272,7 @@ export default function ProfileCreatePage() {
           {steps.map((label, i) => (
             <div key={label} className="flex flex-1 items-center last:flex-none">
               <div className="flex flex-col items-center gap-2">
-                <span
-                  className={`flex size-9 items-center justify-center rounded-full text-sm font-semibold transition-all duration-300 ${
-                    i < step
-                      ? "bg-green-600 text-white"
-                      : i === step
-                        ? "bg-gradient-to-br from-purple-600 to-violet-600 text-white shadow-[0_0_16px_rgba(139,92,246,0.5)]"
-                        : "bg-white/10 text-gray-500"
-                  }`}
-                >
+                <span className={`flex size-9 items-center justify-center rounded-full text-sm font-semibold transition-all duration-300 ${i < step ? "bg-green-600 text-white" : i === step ? "bg-gradient-to-br from-purple-600 to-violet-600 text-white shadow-[0_0_16px_rgba(139,92,246,0.5)]" : "bg-white/10 text-gray-500"}`}>
                   {i < step ? <Check className="size-4" /> : i + 1}
                 </span>
                 <span className={`hidden text-xs sm:block ${i === step ? "text-white" : "text-gray-500"}`}>{label}</span>
@@ -300,8 +291,8 @@ export default function ProfileCreatePage() {
               <h2 className="text-xl font-bold text-white">Tell us about yourself</h2>
               <div className="mt-6 flex flex-col gap-4">
                 <InputField label="Full Name" value={fullName} onChange={setFullName} placeholder="Your full name" />
-                <SelectField label="Country of residence" value={country} onChange={setCountry} options={allCountries.map((c) => ({ value: c.name, label: `${c.flag} ${c.name}` }))} />
-                <SelectField label="Nationality" value={nationality} onChange={setNationality} options={allCountries.map((c) => ({ value: c.name, label: `${c.flag} ${c.name}` }))} />
+                <SearchableCountry label="Country of residence" value={country} onChange={setCountry} />
+                <SearchableCountry label="Nationality" value={nationality} onChange={setNationality} />
               </div>
             </>
           )}
@@ -314,21 +305,19 @@ export default function ProfileCreatePage() {
                   <p className="mb-2 text-sm font-medium text-white">Degree level you want to pursue</p>
                   <div className="grid grid-cols-3 gap-3">
                     {degrees.map((d) => (
-                      <button
-                        key={d}
-                        onClick={() => setDegree(d)}
-                        className={`rounded-xl border py-3 text-sm font-semibold transition-all duration-300 ${
-                          degree === d
-                            ? "border-purple-500 bg-purple-500/15 text-white shadow-[0_0_16px_rgba(139,92,246,0.3)]"
-                            : "border-white/10 text-gray-400 hover:bg-white/5"
-                        }`}
-                      >
+                      <button key={d} onClick={() => setDegree(d)} className={`rounded-xl border py-3 text-sm font-semibold transition-all duration-300 ${degree === d ? "border-purple-500 bg-purple-500/15 text-white shadow-[0_0_16px_rgba(139,92,246,0.3)]" : "border-white/10 text-gray-400 hover:bg-white/5"}`}>
                         {d}
                       </button>
                     ))}
                   </div>
                 </div>
-                <SelectField label="Field of study" value={fieldOfStudy} onChange={setFieldOfStudy} options={fields.map((f) => ({ value: f, label: f }))} />
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-white">Field of study</label>
+                  <select value={fieldOfStudy} onChange={(e) => setFieldOfStudy(e.target.value)} className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none focus:border-purple-500">
+                    <option value="" className="bg-[#1a1a2e]">Select field...</option>
+                    {fields.map((f) => <option key={f} value={f} className="bg-[#1a1a2e]">{f}</option>)}
+                  </select>
+                </div>
                 <InputField label="Current / Last University" value={university} onChange={setUniversity} placeholder="e.g. NUST Islamabad" />
                 <InputField label="GPA (0.0 - 4.0)" value={gpa} onChange={setGpa} placeholder="e.g. 3.5" type="number" />
               </div>
@@ -364,30 +353,28 @@ export default function ProfileCreatePage() {
                         return (
                           <span key={name} className="inline-flex items-center gap-1.5 rounded-full bg-purple-500/20 px-3 py-1 text-sm text-purple-300">
                             {c?.flag} {name}
-                            <button onClick={() => setSelectedCountries((p) => p.filter((x) => x !== name))} aria-label={`Remove ${name}`}>
-                              <X className="size-3.5" />
-                            </button>
+                            <button onClick={() => setSelectedCountries((p) => p.filter((x) => x !== name))}><X className="size-3.5" /></button>
                           </span>
                         )
                       })}
                     </div>
                   )}
-                  <input
-                    value={countryQuery}
-                    onChange={(e) => setCountryQuery(e.target.value)}
-                    placeholder="Search countries..."
-                    className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-gray-500 outline-none transition-all focus:border-purple-500 focus:shadow-[0_0_0_3px_rgba(139,92,246,0.25)]"
-                  />
-                  {countryQuery && filteredCountries.length > 0 && (
-                    <div className="mt-2 max-h-40 overflow-y-auto flex flex-wrap gap-2">
-                      {filteredCountries.slice(0, 15).map((c) => (
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-500" />
+                    <input
+                      value={countryQuery}
+                      onChange={(e) => setCountryQuery(e.target.value)}
+                      placeholder="Search countries to add..."
+                      className="w-full rounded-xl border border-white/10 bg-white/5 pl-10 pr-4 py-3 text-sm text-white placeholder:text-gray-500 outline-none focus:border-purple-500 focus:shadow-[0_0_0_3px_rgba(139,92,246,0.25)]"
+                    />
+                  </div>
+                  {countryQuery && filteredPrefCountries.length > 0 && (
+                    <div className="mt-2 max-h-40 overflow-y-auto rounded-xl border border-white/10 bg-[#1a1a2e] p-2">
+                      {filteredPrefCountries.slice(0, 10).map((c) => (
                         <button
                           key={c.name}
-                          onClick={() => {
-                            setSelectedCountries((p) => [...p, c.name])
-                            setCountryQuery("")
-                          }}
-                          className="rounded-full border border-white/10 px-3 py-1 text-sm text-gray-400 hover:bg-white/5"
+                          onClick={() => { setSelectedCountries((p) => [...p, c.name]); setCountryQuery("") }}
+                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/5"
                         >
                           {c.flag} {c.name}
                         </button>
@@ -399,15 +386,7 @@ export default function ProfileCreatePage() {
                   <p className="mb-2 text-sm font-medium text-white">Funding preference</p>
                   <div className="grid grid-cols-3 gap-3">
                     {fundingOpts.map((f) => (
-                      <button
-                        key={f}
-                        onClick={() => setFunding(f)}
-                        className={`rounded-xl border py-3 text-sm font-semibold transition-all duration-300 ${
-                          funding === f
-                            ? "border-purple-500 bg-purple-500/15 text-white shadow-[0_0_16px_rgba(139,92,246,0.3)]"
-                            : "border-white/10 text-gray-400 hover:bg-white/5"
-                        }`}
-                      >
+                      <button key={f} onClick={() => setFunding(f)} className={`rounded-xl border py-3 text-sm font-semibold transition-all duration-300 ${funding === f ? "border-purple-500 bg-purple-500/15 text-white shadow-[0_0_16px_rgba(139,92,246,0.3)]" : "border-white/10 text-gray-400 hover:bg-white/5"}`}>
                         {f}
                       </button>
                     ))}
@@ -420,10 +399,7 @@ export default function ProfileCreatePage() {
           {/* Nav buttons */}
           <div className="mt-8 flex items-center gap-3">
             {step > 0 && (
-              <button
-                onClick={back}
-                className="inline-flex items-center gap-2 rounded-xl border border-white/15 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/5"
-              >
+              <button onClick={back} className="inline-flex items-center gap-2 rounded-xl border border-white/15 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/5">
                 <ArrowLeft className="size-4" /> Back
               </button>
             )}
@@ -432,19 +408,19 @@ export default function ProfileCreatePage() {
               disabled={saving}
               className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 py-3 text-sm font-semibold text-white shadow-[0_0_18px_rgba(139,92,246,0.45)] transition-transform hover:scale-[1.01] disabled:opacity-50"
             >
-              {saving ? (
-                "Saving..."
-              ) : step === 3 ? (
-                <>
-                  Complete Profile <Sparkles className="size-4" />
-                </>
-              ) : (
-                <>
-                  Next <ArrowRight className="size-4" />
-                </>
-              )}
+              {saving ? "Saving..." : step === 3 ? (<>Complete Profile <Sparkles className="size-4" /></>) : (<>Next <ArrowRight className="size-4" /></>)}
             </button>
           </div>
+
+          {/* Skip option */}
+          {step === 0 && (
+            <button
+              onClick={() => router.push("/dashboard")}
+              className="mt-4 w-full text-center text-sm text-gray-500 hover:text-gray-300 transition-colors"
+            >
+              Skip for now — I&apos;ll complete this later
+            </button>
+          )}
         </div>
       </div>
     </main>
@@ -455,34 +431,72 @@ function InputField({ label, value, onChange, placeholder, type = "text", disabl
   return (
     <div>
       <label className="mb-1.5 block text-sm font-medium text-white">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        disabled={disabled}
-        className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-gray-500 outline-none transition-all focus:border-purple-500 focus:shadow-[0_0_0_3px_rgba(139,92,246,0.25)] disabled:opacity-40"
-      />
+      <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} disabled={disabled} className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-gray-500 outline-none transition-all focus:border-purple-500 focus:shadow-[0_0_0_3px_rgba(139,92,246,0.25)] disabled:opacity-40" />
     </div>
   )
 }
 
-function SelectField({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+function SearchableCountry({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  const [query, setQuery] = useState("")
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  const filtered = allCountries.filter((c) => c.name.toLowerCase().includes(query.toLowerCase()))
+  const selected = allCountries.find((c) => c.name === value)
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [])
+
   return (
-    <div>
+    <div ref={ref} className="relative">
       <label className="mb-1.5 block text-sm font-medium text-white">{label}</label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition-all focus:border-purple-500"
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-left outline-none transition-all focus:border-purple-500 focus:shadow-[0_0_0_3px_rgba(139,92,246,0.25)]"
       >
-        <option value="" className="bg-[#1a1a2e]">Select...</option>
-        {options.map((o) => (
-          <option key={o.value} value={o.value} className="bg-[#1a1a2e]">
-            {o.label}
-          </option>
-        ))}
-      </select>
+        {selected ? (
+          <span className="text-white">{selected.flag} {selected.name}</span>
+        ) : (
+          <span className="text-gray-500">Search and select...</span>
+        )}
+        <Search className="size-4 text-gray-500" />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-full rounded-xl border border-white/10 bg-[#1a1a2e] p-2 shadow-2xl">
+          <div className="relative mb-2">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-500" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Type to search..."
+              autoFocus
+              className="w-full rounded-lg border border-white/10 bg-white/5 pl-10 pr-4 py-2 text-sm text-white placeholder:text-gray-500 outline-none focus:border-purple-500"
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <p className="px-3 py-2 text-sm text-gray-500">No country found</p>
+            ) : (
+              filtered.slice(0, 20).map((c) => (
+                <button
+                  key={c.name}
+                  onClick={() => { onChange(c.name); setOpen(false); setQuery("") }}
+                  className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${value === c.name ? "bg-purple-500/20 text-purple-300" : "text-gray-300 hover:bg-white/5"}`}
+                >
+                  {c.flag} {c.name}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
