@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { Check, ArrowRight, ArrowLeft, GraduationCap, X, Sparkles, CheckCircle2, Search } from "lucide-react"
+import { Check, ArrowRight, ArrowLeft, GraduationCap, X, Sparkles, CheckCircle2, Search, ChevronDown } from "lucide-react"
 import { GradientOrbs } from "@/components/gradient-orbs"
 import { createClient } from "@supabase/supabase-js"
 
@@ -229,7 +229,7 @@ export default function ProfileCreatePage() {
   const back = () => setStep((s) => Math.max(0, s - 1))
 
   const filteredPrefCountries = allCountries.filter(
-    (c) => c.name.toLowerCase().includes(countryQuery.toLowerCase()) && !selectedCountries.includes(c.name),
+    (c) => c.name.toLowerCase().startsWith(countryQuery.toLowerCase()) && !selectedCountries.includes(c.name),
   )
 
   if (done) {
@@ -345,15 +345,15 @@ export default function ProfileCreatePage() {
               <h2 className="text-xl font-bold text-white">Your scholarship preferences</h2>
               <div className="mt-6 flex flex-col gap-4">
                 <div>
-                  <p className="mb-2 text-sm font-medium text-white">Preferred study destinations</p>
+                  <p className="mb-2 text-sm font-medium text-white">Preferred study destinations <span className="text-gray-500">({selectedCountries.length}/10)</span></p>
                   {selectedCountries.length > 0 && (
-                    <div className="mb-2 flex flex-wrap gap-2">
+                    <div className="mb-3 flex flex-wrap gap-2">
                       {selectedCountries.map((name) => {
                         const c = allCountries.find((x) => x.name === name)
                         return (
-                          <span key={name} className="inline-flex items-center gap-1.5 rounded-full bg-purple-500/20 px-3 py-1 text-sm text-purple-300">
+                          <span key={name} className="inline-flex items-center gap-1.5 rounded-full bg-purple-500/20 border border-purple-500/30 px-3 py-1.5 text-sm text-purple-300">
                             {c?.flag} {name}
-                            <button onClick={() => setSelectedCountries((p) => p.filter((x) => x !== name))}><X className="size-3.5" /></button>
+                            <button onClick={() => setSelectedCountries((p) => p.filter((x) => x !== name))} className="hover:text-white transition-colors"><X className="size-3.5" /></button>
                           </span>
                         )
                       })}
@@ -364,22 +364,34 @@ export default function ProfileCreatePage() {
                     <input
                       value={countryQuery}
                       onChange={(e) => setCountryQuery(e.target.value)}
-                      placeholder="Search countries to add..."
+                      placeholder="Type country name (e.g. 'P' for Pakistan)..."
                       className="w-full rounded-xl border border-white/10 bg-white/5 pl-10 pr-4 py-3 text-sm text-white placeholder:text-gray-500 outline-none focus:border-purple-500 focus:shadow-[0_0_0_3px_rgba(139,92,246,0.25)]"
                     />
                   </div>
-                  {countryQuery && filteredPrefCountries.length > 0 && (
-                    <div className="mt-2 max-h-40 overflow-y-auto rounded-xl border border-white/10 bg-[#1a1a2e] p-2">
-                      {filteredPrefCountries.slice(0, 10).map((c) => (
-                        <button
-                          key={c.name}
-                          onClick={() => { setSelectedCountries((p) => [...p, c.name]); setCountryQuery("") }}
-                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/5"
-                        >
-                          {c.flag} {c.name}
-                        </button>
-                      ))}
+                  {countryQuery && (
+                    <div className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-white/10 bg-[#1a1a2e] p-2">
+                      {filteredPrefCountries.length > 0 ? (
+                        filteredPrefCountries.slice(0, 15).map((c) => (
+                          <button
+                            key={c.name}
+                            onClick={() => {
+                              if (selectedCountries.length < 10) {
+                                setSelectedCountries((p) => [...p, c.name])
+                              }
+                              setCountryQuery("")
+                            }}
+                            className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm text-gray-300 hover:bg-white/5 transition-colors"
+                          >
+                            {c.flag} {c.name}
+                          </button>
+                        ))
+                      ) : (
+                        <p className="px-3 py-2 text-sm text-gray-500">No countries found</p>
+                      )}
                     </div>
+                  )}
+                  {selectedCountries.length >= 10 && (
+                    <p className="mt-2 text-xs text-amber-400">Maximum 10 countries reached</p>
                   )}
                 </div>
                 <div>
@@ -440,8 +452,23 @@ function SearchableCountry({ label, value, onChange }: { label: string; value: s
   const [query, setQuery] = useState("")
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
-  const filtered = allCountries.filter((c) => c.name.toLowerCase().includes(query.toLowerCase()))
+  // Smart filtering: startsWith first, then includes
+  const filtered = allCountries.filter((c) => {
+    if (!query) return true
+    return c.name.toLowerCase().startsWith(query.toLowerCase())
+  })
+
+  // Also show "contains" matches after startsWith matches
+  const containsMatches = query
+    ? allCountries.filter(
+        (c) => !c.name.toLowerCase().startsWith(query.toLowerCase()) && c.name.toLowerCase().includes(query.toLowerCase())
+      )
+    : []
+
+  const allFiltered = [...filtered, ...containsMatches]
+
   const selected = allCountries.find((c) => c.name === value)
 
   useEffect(() => {
@@ -457,7 +484,10 @@ function SearchableCountry({ label, value, onChange }: { label: string; value: s
       <label className="mb-1.5 block text-sm font-medium text-white">{label}</label>
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          setOpen(!open)
+          setTimeout(() => inputRef.current?.focus(), 100)
+        }}
         className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-left outline-none transition-all focus:border-purple-500 focus:shadow-[0_0_0_3px_rgba(139,92,246,0.25)]"
       >
         {selected ? (
@@ -465,30 +495,33 @@ function SearchableCountry({ label, value, onChange }: { label: string; value: s
         ) : (
           <span className="text-gray-500">Search and select...</span>
         )}
-        <Search className="size-4 text-gray-500" />
+        <ChevronDown className={`size-4 text-gray-500 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full rounded-xl border border-white/10 bg-[#1a1a2e] p-2 shadow-2xl">
-          <div className="relative mb-2">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-500" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Type to search..."
-              autoFocus
-              className="w-full rounded-lg border border-white/10 bg-white/5 pl-10 pr-4 py-2 text-sm text-white placeholder:text-gray-500 outline-none focus:border-purple-500"
-            />
+        <div className="absolute z-50 mt-1 w-full rounded-xl border border-white/10 bg-[#1a1a2e] shadow-2xl">
+          <div className="p-3 border-b border-white/10">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-500" />
+              <input
+                ref={inputRef}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Type to search (e.g. 'P' for Pakistan)..."
+                autoFocus
+                className="w-full rounded-lg border border-white/10 bg-white/5 pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-gray-500 outline-none focus:border-purple-500"
+              />
+            </div>
           </div>
-          <div className="max-h-48 overflow-y-auto">
-            {filtered.length === 0 ? (
-              <p className="px-3 py-2 text-sm text-gray-500">No country found</p>
+          <div className="max-h-56 overflow-y-auto p-1">
+            {allFiltered.length === 0 ? (
+              <p className="px-3 py-3 text-sm text-gray-500 text-center">No country found</p>
             ) : (
-              filtered.slice(0, 20).map((c) => (
+              allFiltered.map((c) => (
                 <button
                   key={c.name}
                   onClick={() => { onChange(c.name); setOpen(false); setQuery("") }}
-                  className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${value === c.name ? "bg-purple-500/20 text-purple-300" : "text-gray-300 hover:bg-white/5"}`}
+                  className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors ${value === c.name ? "bg-purple-500/20 text-purple-300" : "text-gray-300 hover:bg-white/5"}`}
                 >
                   {c.flag} {c.name}
                 </button>
